@@ -80,8 +80,11 @@ func (s *Service) ProcessOne(ctx context.Context) (model.Packet, bool, error) {
 			s.recordFailure(wrapped)
 			return pkt, false, wrapped
 		}
+		// 瞬时错误重试一次；重试仍失败则真实上报并向上返回错误，避免报文静默丢失。
 		if retryErr := s.store.Put(pkt); retryErr != nil {
-			_ = store.WrapPutError(pkt.ID, retryErr)
+			wrapped := store.WrapPutError(pkt.ID, retryErr)
+			s.recordFailure(wrapped)
+			return pkt, false, wrapped
 		}
 	}
 	s.recordStored()

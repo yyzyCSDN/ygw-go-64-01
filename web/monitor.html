@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>PacketReplay 监控台</title>
+  <style>
+    body { font-family: "Microsoft YaHei", system-ui, sans-serif; margin: 0; background: #f4f6f8; color: #1f2937; }
+    header { background: #0f172a; color: #e2e8f0; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 18px; margin: 0; }
+    .wrap { max-width: 1080px; margin: 24px auto; padding: 0 16px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .card h3 { margin: 0 0 8px; font-size: 13px; color: #64748b; }
+    .card .value { font-size: 26px; font-weight: 700; }
+    button { background: #2563eb; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+    button.secondary { background: #475569; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 8px 10px; text-align: left; font-size: 13px; border-bottom: 1px solid #eef2f7; }
+    th { background: #f8fafc; color: #475569; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; }
+    input[type=text] { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 320px; }
+    #log { margin-top: 18px; font-family: Consolas, monospace; font-size: 12px; color: #334155; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PacketReplay 网络流量采集与回放监控台</h1>
+    <span id="clock"></span>
+  </header>
+  <div class="wrap">
+    <div class="toolbar">
+      <button onclick="refreshStatus()">刷新状态</button>
+      <button onclick="startCapture()">启动采集</button>
+      <button class="secondary" onclick="stopCapture()">停止采集</button>
+      <button onclick="runReplay()">执行回放</button>
+      <input type="text" id="query" placeholder="检索关键字，如 10.0.0.1:1000-10.0.0.2:80/tcp" />
+      <button onclick="search()">检索</button>
+    </div>
+    <div class="cards" id="cards"></div>
+    <h2 style="font-size:15px;">报文流列表</h2>
+    <table id="streams"><thead><tr><th>五元组</th><th>报文数</th></tr></thead><tbody></tbody></table>
+    <h2 style="font-size:15px;margin-top:18px;">检索/回放输出</h2>
+    <table id="packets"><thead><tr><th>ID</th><th>流</th><th>协议</th><th>序号</th><th>时间</th><th>大小</th><th>分片</th></tr></thead><tbody></tbody></table>
+    <div id="log"></div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    function log(text) { $("log").textContent = new Date().toLocaleTimeString() + " " + text + "\n" + $("log").textContent; }
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      if (!res.ok) throw new Error(path + " -> " + res.status);
+      return res.json();
+    }
+    function tick() { $("clock").textContent = new Date().toLocaleTimeString(); }
+    setInterval(tick, 1000); tick();
+
+    async function refreshStatus() {
+      try {
+        const data = await api("/api/status");
+        const cards = [
+          ["采集接收", data.capture.received],
+          ["已入库", data.store.packets],
+          ["采集失败", data.capture.failed],
+          ["去重拦截", data.capture.deduped],
+          ["流数量", data.store.streams],
+          ["存储块", data.store.chunks],
+          ["索引版本", data.index.version],
+          ["回放报文", data.replay.packets]
+        ];
+        $("cards").innerHTML = cards.map(([name, value]) =>
+          `<div class="card"><h3>${name}</h3><div class="value">${value}</div></div>`).join("");
+        log("状态已刷新");
+      } catch (err) { log("刷新失败: " + err.message); }
+    }
+
+    async function loadStreams() {
+      const rows = await api("/api/streams");
+      $("streams").querySelector("tbody").innerHTML = rows.map(row =>
+        `<tr><td>${row.key}</td><td>${row.packets}</td></tr>`).join("");
+    }
+
+    async function startCapture() { await api("/api/capture/start", { method: "POST" }); log("采集已启动"); refreshStatus(); }
+    async function stopCapture() { await api("/api/capture/stop", { method: "POST" }); log("采集停止中"); refreshStatus(); }
+
+    async function runReplay() {
+      const data = await api("/api/replay", { method: "POST" });
+      log("回放完成，共输出 " + data.emitted + " 条");
+      renderPackets(data.outputs);
+    }
+
+    async function search() {
+      const q = encodeURIComponent($("query").value || "");
+      const rows = await api("/api/search?q=" + q);
+      renderPackets(rows);
+      log("检索到 " + rows.length + " 条");
+    }
+
+    function renderPackets(rows) {
+      $("packets").querySelector("tbody").innerHTML = rows.map(row =>
+        `<tr><td>${row.id}</td><td>${row.stream}</td><td>${row.proto}</td><td>${row.seq}</td>` +
+        `<td>${row.timestamp}</td><td>${row.size}</td><td>${row.fragment ? "是" : "否"}</td></tr>`).join("");
+    }
+
+    refreshStatus(); loadStreams();
+  </script>
+</body>
+</html>

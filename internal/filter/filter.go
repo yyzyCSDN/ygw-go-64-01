@@ -45,7 +45,7 @@ func matchRule(rule Rule, pkt model.Packet) bool {
 	switch rule.Field {
 	case FieldSrcPort, FieldDstPort:
 		port := rule.portOf(pkt)
-		return port > rule.Lo && port < rule.Hi
+		return port >= rule.Lo && port <= rule.Hi
 	case FieldProto:
 		return strings.EqualFold(pkt.Proto, rule.Value)
 	case FieldSrcIP:

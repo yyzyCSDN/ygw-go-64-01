@@ -18,8 +18,12 @@ func (s *Scheduler) ChunkSize() int {
 // Chunks 返回覆盖 [0,total) 全部下标的半开区间列表，余数部分单独成块。
 func (s *Scheduler) Chunks(total int) [][2]int {
 	out := make([][2]int, 0, (total+s.chunkSize-1)/s.chunkSize)
-	for start := 0; start+s.chunkSize <= total; start += s.chunkSize {
-		out = append(out, [2]int{start, start + s.chunkSize})
+	for start := 0; start < total; start += s.chunkSize {
+		end := start + s.chunkSize
+		if end > total {
+			end = total
+		}
+		out = append(out, [2]int{start, end})
 	}
 	return out
 }

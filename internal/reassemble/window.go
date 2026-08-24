@@ -41,7 +41,7 @@ func NewWindow(key model.StreamKey, seq uint64, total uint32) *Window {
 
 // Within 判断分片偏移量是否落在窗口闭区间内。
 func (w *Window) Within(offset uint32) bool {
-	return offset < w.End
+	return offset <= w.End
 }
 
 // Add 记录一片分片；重复分片返回重复错误。

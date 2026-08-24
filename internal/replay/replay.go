@@ -113,7 +113,13 @@ func (s *ReplayService) Replay(ctx context.Context, packets []model.Packet) (int
 // ReplayStream 回放指定流的全部报文并记录流级任务。
 func (s *ReplayService) ReplayStream(ctx context.Context, key model.StreamKey) (int, error) {
 	packets := s.store.GetStream(key)
-	task := s.tracker.Begin("replay-stream-" + packets[0].ID)
+	// 空流没有报文，不能取 packets[0]，否则会越界把进程拖崩；
+	// 改用流键作为任务标识，把空切片交给 Replay 统一处理，返回空列表。
+	taskID := "replay-stream-" + key.String()
+	if len(packets) > 0 {
+		taskID = "replay-stream-" + packets[0].ID
+	}
+	task := s.tracker.Begin(taskID)
 	emitted, err := s.Replay(ctx, packets)
 	if err != nil {
 		return emitted, err
